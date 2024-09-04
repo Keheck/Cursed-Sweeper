@@ -71,6 +71,9 @@ int main(int argc, char **argv)
             case ' ':
                 reveal_tile(tile_states, x/2, y);
                 break;
+            case 'm':
+                mark_tile(tile_states, x/2, y);
+                break;
             default:
                 break;
         }
@@ -190,16 +193,18 @@ void setup_colors() {
         init_pair(6, COLOR_ORANGE, COLOR_BLACK);
         init_pair(7, COLOR_RED, COLOR_BLACK);
         init_pair(8, COLOR_BLUE, COLOR_BLACK);
+
+        init_pair(10, COLOR_YELLOW, COLOR_WHITE);
     }
 }
 
 #define IS_REVEALED(x) (((x) & 2) == 2)
 #define IS_BOMB(x) (((x) & 1) == 1)
+#define IS_MARKED(x) (((x) & (1<<2)) == 1<<2)
 
 void render_game(t_tile_state *tile_states) {
     clear();
     curs_set(0);
-    attron(A_REVERSE);
 
     for(int y = 0; y < game_config.sizey; y++) {
         move(y, 0);
@@ -209,10 +214,15 @@ void render_game(t_tile_state *tile_states) {
             t_tile_state status = tile_states[index];
 
             if(!IS_REVEALED(status)) {
-                attrset(A_REVERSE | COLOR_PAIR(0));
-                printw("  ");
+                if(IS_MARKED(status)) {
+                    attrset(COLOR_PAIR(10) | A_BOLD);
+                    printw("??");
+                }
+                else {
+                    attrset(A_REVERSE | COLOR_PAIR(0));
+                    printw("  ");
+                }
             }
-
             else if(IS_BOMB(status)) {
                 attrset(A_REVERSE | COLOR_PAIR(3));
                 printw("  ");
@@ -274,4 +284,16 @@ void reveal_tile(t_tile_state *tile_states, int x, int y) {
         reveal_tile(tile_states, x-1, y+1),
         reveal_tile(tile_states, x-1, y-1);
     }
+}
+
+void mark_tile(t_tile_state *tile_states, int x, int y) {
+    if(x < 0 || x >= game_config.sizex || y < 0 || y >= game_config.sizey) 
+        return;
+
+    size_t index = y * game_config.sizex + x;
+    
+    if(IS_REVEALED(tile_states[index]))
+        return;
+    
+    tile_states[index] ^= 1 << 2;    
 }
