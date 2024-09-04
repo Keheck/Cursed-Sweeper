@@ -69,7 +69,7 @@ int main(int argc, char **argv)
                 ch == KEY_RIGHT ? (x += 2) : (x -= 2);
                 break;
             case ' ':
-
+                reveal_tile(tile_states, x/2, y);
                 break;
             default:
                 break;
@@ -193,6 +193,9 @@ void setup_colors() {
     }
 }
 
+#define IS_REVEALED(x) (((x) & 2) == 2)
+#define IS_BOMB(x) (((x) & 1) == 1)
+
 void render_game(t_tile_state *tile_states) {
     clear();
     curs_set(0);
@@ -202,7 +205,15 @@ void render_game(t_tile_state *tile_states) {
         move(y, 0);
 
         for(int x = 0; x < game_config.sizex; x++) {
-            if(tile_states[y * game_config.sizex + x]) {
+            size_t index = y * game_config.sizex + x;
+            t_tile_state status = tile_states[index];
+
+            if(!IS_REVEALED(status)) {
+                attrset(A_REVERSE | COLOR_PAIR(0));
+                printw("  ");
+            }
+
+            else if(IS_BOMB(status)) {
                 attrset(A_REVERSE | COLOR_PAIR(3));
                 printw("  ");
             }
@@ -231,11 +242,36 @@ uint8_t get_bomb_count(t_tile_state *tile_states, int x, int y) {
                 continue;
             }
 
-            if(tile_states[(y+offy)*game_config.sizex + x + offx] & 1) {
+            size_t index = (y+offy)*game_config.sizex + x + offx;
+
+            if(IS_BOMB(tile_states[index])) {
                 result++;
             }            
         }
     }
 
     return result;
+}
+
+void reveal_tile(t_tile_state *tile_states, int x, int y) {
+    if(x < 0 || x >= game_config.sizex || y < 0 || y >= game_config.sizey) 
+        return;
+
+    size_t index = y * game_config.sizex + x;
+    
+    if(IS_REVEALED(tile_states[index]))
+        return;
+
+    tile_states[index] |= 2;
+    
+    if(get_bomb_count(tile_states, x, y) == 0) {
+        reveal_tile(tile_states, x+1, y);
+        reveal_tile(tile_states, x-1, y);
+        reveal_tile(tile_states, x, y+1);
+        reveal_tile(tile_states, x, y-1);
+        reveal_tile(tile_states, x+1, y+1);
+        reveal_tile(tile_states, x+1, y-1);
+        reveal_tile(tile_states, x-1, y+1),
+        reveal_tile(tile_states, x-1, y-1);
+    }
 }
