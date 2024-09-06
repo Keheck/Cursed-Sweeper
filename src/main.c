@@ -152,19 +152,35 @@ error_t parse(int key, char *arg, struct argp_state *state) {
     return ARGP_ERR_UNKNOWN;
 }
 
+#define TIME_LITERAL  "Time elapsed: XXXs"
+#define BOMBS_LITERAL "Bombs remaining: XX"
+
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
 void ensure_game_size() {
-    if(getmaxx(stdscr) < game_config.sizex*2 || getmaxy(stdscr) < game_config.sizey) {
+    const int recX = MAX(game_config.sizex*2, MAX(sizeof(TIME_LITERAL), sizeof(BOMBS_LITERAL)));
+    const int recY = game_config.sizey+2;
+
+    int currX, currY;
+    getmaxyx(stdscr, currY, currX);
+
+    if(currX < recX || currY < recY) {
         clear();
         printw("Your terminal is too small, please increase its size until the game continues...");
 
-        while(getmaxx(stdscr) < game_config.sizex*2 || getmaxy(stdscr) < game_config.sizey) {
+        while(currX < recX || currY < recY) {
+            getmaxyx(stdscr, currY, currX);
             move(1, 0);
             clrtoeol();
-            mvprintw(1, 0, "Current screen size: %d * %d\n", getmaxx(stdscr)/2, getmaxy(stdscr));
-            printw("Expected screen size: %d, %d", game_config.sizex, game_config.sizey);
+            mvprintw(1, 0, "Current screen size: %d * %d\n", currX, currY);
+            printw("Recommended screen size: %d, %d", recX, recY);
             refresh();
         }
+
+        getch();
     }
+
+    flushinp();
 }
 
 void setup_colors() {
@@ -198,9 +214,21 @@ void setup_colors() {
     }
 }
 
-#define IS_REVEALED(x) (((x) & 2) == 2)
-#define IS_BOMB(x) (((x) & 1) == 1)
-#define IS_MARKED(x) (((x) & (1<<2)) == 1<<2)
+#define BIT(x) (1 << (x))
+
+#define BIT_SET(x, b) ((x) |= (b))
+#define BIT_CLEAR(x, b) ((x) &= ~(b))
+#define BIT_TOGGLE(x, b) ((x) ^= (b))
+
+#define IS_BIT_SET(x, b) (((x) & (b)) == (b))
+
+#define BOMB_BIT BIT(0)
+#define REVEAL_BIT BIT(1)
+#define MARK_BIT BIT(2)
+
+#define IS_BOMB(x) IS_BIT_SET(x, BOMB_BIT)
+#define IS_REVEALED(x) IS_BIT_SET(x, REVEAL_BIT)
+#define IS_MARKED(x) IS_BIT_SET(x, MARK_BIT)
 
 void render_game(t_tile_state *tile_states) {
     clear();
@@ -272,7 +300,8 @@ void reveal_tile(t_tile_state *tile_states, int x, int y) {
     if(IS_REVEALED(tile_states[index]))
         return;
 
-    tile_states[index] |= 2;
+    BIT_SET(tile_states[index], REVEAL_BIT);
+    BIT_CLEAR(tile_states[index], MARK_BIT);
     
     if(get_bomb_count(tile_states, x, y) == 0) {
         reveal_tile(tile_states, x+1, y);
@@ -295,5 +324,5 @@ void mark_tile(t_tile_state *tile_states, int x, int y) {
     if(IS_REVEALED(tile_states[index]))
         return;
     
-    tile_states[index] ^= 1 << 2;    
+    BIT_TOGGLE(tile_states[index], MARK_BIT);    
 }
