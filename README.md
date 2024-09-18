@@ -59,8 +59,8 @@ the release version of the game in `./build/bin/`
 
 ## Missing features
 
-[ ] An actual victory screen
-[ ] Implementing the zen mode
-[ ] Make the engine cleaner
-[ ] Add a nice TUI for customizing the game
-[ ] What else?
+* [ ] An actual victory screen
+* [ ] Implementing the zen mode
+* [ ] Make the engine cleaner
+* [ ] Add a nice TUI for customizing the game
+* [ ] What else?
