@@ -4,6 +4,7 @@
 #include <argp.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
 
 #include "ansi.h"
 #include "main.h"
@@ -11,7 +12,14 @@
 
 #define COLOR_ORANGE 8
 
-static t_config game_config = {10, 10, 12, 0, 0};
+static t_config game_config = {15, 15, 10, 0, 0};
+
+static char *time_elapsed = "Time elapsed: <revealed after game>";
+static char *bombs_remaining = "Bombs remaining: %3d";
+
+int time_length;
+int bomb_length;
+int bombs_marked;
 
 int main(int argc, char **argv)
 {
@@ -22,7 +30,7 @@ int main(int argc, char **argv)
     };
 
     struct argp parser = {options, parse, "[X-SIZE [Y-SIZE [BOMB_RATIO]]]",
-        "Starts a game of minesweeper, in the terminal! Can be played as expected with your mouse cursor.\v"
+        "Starts a game of minesweeper, in the terminal!\v"
         MODIFY("X-SIZE", BOLD) " and " MODIFY("Y-SIZE", BOLD) " are the horizontal and vertical size of the board, respectively. "
         MODIFY("BOMB_RATIO", BOLD) " is the ratio of bombs compared to the number of tiles, expressed as a percentage. "
         "For example, with an " MODIFY("X_SIZE", BOLD) " and " MODIFY("Y-SIZE", BOLD) " of 15 (so an area of 225 tiles), "
@@ -40,6 +48,12 @@ int main(int argc, char **argv)
     raw();
     noecho();
 
+    char buf[128] = {0};
+    snprintf(buf, sizeof(buf)/sizeof(char), time_elapsed, 0);
+    time_length = strlen(buf);
+    snprintf(buf, sizeof(buf)/sizeof(char), bombs_remaining, 0);
+    bomb_length = strlen(buf);
+
     setup_colors();
     ensure_game_size();
 
@@ -47,16 +61,20 @@ int main(int argc, char **argv)
     setup_game(tile_states);
 
     int ch;
-    curs_set(1);
+    curs_set(0);
     move(0, 0);
     int x = 1;
     int y = 0;
+    BIT_SET(tile_states[0], HOVER_BIT);
+
     do {
         ensure_game_size();
         render_game(tile_states);
         move(y, x);
         
         ch = getch();
+
+        BIT_CLEAR(tile_states[y * game_config.sizex + x/2], HOVER_BIT);
 
         switch (ch)
         {
@@ -83,6 +101,7 @@ int main(int argc, char **argv)
 
         if(x/2 >= game_config.sizex) x = game_config.sizex*2-1;
         if(y >= game_config.sizey) y = game_config.sizey-1;
+        BIT_SET(tile_states[y * game_config.sizex + x/2], HOVER_BIT);
 
     } while (ch != 'x');
     
@@ -92,14 +111,19 @@ int main(int argc, char **argv)
     return 0;
 }
 
+inline int min(int a, int b) {
+    return a < b ? a : b;
+}
+
 void setup_game(t_tile_state *tile_states) {
     srand(time(NULL));
     size_t position_count = game_config.sizex * game_config.sizey;
     int_list_t *possible_bombs = create_list(position_count);
 
-    int bomb_count = game_config.bombs_is_abs ? game_config.bombs : position_count / 100.0 * game_config.bombs;
+    if(!game_config.bombs_is_abs)
+        game_config.bombs = position_count * min(game_config.bombs, 100) / 100;
 
-    for(int i = 0; i < bomb_count; i++) {
+    for(int i = 0; i < game_config.bombs; i++) {
         size_t selected = (float)rand() / RAND_MAX * position_count;
         
         tile_states[get_index(possible_bombs, selected)] = 1;
@@ -152,13 +176,8 @@ error_t parse(int key, char *arg, struct argp_state *state) {
     return ARGP_ERR_UNKNOWN;
 }
 
-#define TIME_LITERAL  "Time elapsed: XXXs"
-#define BOMBS_LITERAL "Bombs remaining: XX"
-
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-
 void ensure_game_size() {
-    const int recX = MAX(game_config.sizex*2, MAX(sizeof(TIME_LITERAL), sizeof(BOMBS_LITERAL)));
+    const int recX = MAX(game_config.sizex*2, MAX(time_length, bomb_length));
     const int recY = game_config.sizey+2;
 
     int currX, currY;
@@ -176,8 +195,6 @@ void ensure_game_size() {
             printw("Recommended screen size: %d, %d", recX, recY);
             refresh();
         }
-
-        getch();
     }
 
     flushinp();
@@ -211,43 +228,26 @@ void setup_colors() {
         init_pair(8, COLOR_BLUE, COLOR_BLACK);
 
         init_pair(10, COLOR_YELLOW, COLOR_WHITE);
+        init_pair(11, COLOR_GREEN, COLOR_WHITE);
     }
 }
 
-#define BIT(x) (1 << (x))
-
-#define BIT_SET(x, b) ((x) |= (b))
-#define BIT_CLEAR(x, b) ((x) &= ~(b))
-#define BIT_TOGGLE(x, b) ((x) ^= (b))
-
-#define IS_BIT_SET(x, b) (((x) & (b)) == (b))
-
-#define BOMB_BIT BIT(0)
-#define REVEAL_BIT BIT(1)
-#define MARK_BIT BIT(2)
-
-#define IS_BOMB(x) IS_BIT_SET(x, BOMB_BIT)
-#define IS_REVEALED(x) IS_BIT_SET(x, REVEAL_BIT)
-#define IS_MARKED(x) IS_BIT_SET(x, MARK_BIT)
-
 void render_game(t_tile_state *tile_states) {
     clear();
-    curs_set(0);
+    move(0, 0);
 
     for(int y = 0; y < game_config.sizey; y++) {
-        move(y, 0);
-
         for(int x = 0; x < game_config.sizex; x++) {
             size_t index = y * game_config.sizex + x;
             t_tile_state status = tile_states[index];
 
             if(!IS_REVEALED(status)) {
                 if(IS_MARKED(status)) {
-                    attrset(COLOR_PAIR(10) | A_BOLD);
+                    attrset((IS_HOVERED(status) ? A_REVERSE | COLOR_PAIR(11) : COLOR_PAIR(10) | A_BOLD));
                     printw("??");
                 }
                 else {
-                    attrset(A_REVERSE | COLOR_PAIR(0));
+                    attrset(A_REVERSE | (IS_HOVERED(status) ? COLOR_PAIR(11) : COLOR_PAIR(0)));
                     printw("  ");
                 }
             }
@@ -258,13 +258,20 @@ void render_game(t_tile_state *tile_states) {
             else{
                 uint8_t bomb_count = get_bomb_count(tile_states, x, y);
                 attrset(COLOR_PAIR(bomb_count));
+                if(IS_HOVERED(status))
+                    attron(A_REVERSE);
                 printw("%2u", bomb_count);
             }
         }
+
+        printw("\n");
     }
 
     standend();
-    curs_set(1);
+    printw(time_elapsed, 30);
+    printw("\n");
+    printw(bombs_remaining, game_config.bombs - bombs_marked);
+
     refresh();
 }
 
@@ -324,5 +331,12 @@ void mark_tile(t_tile_state *tile_states, int x, int y) {
     if(IS_REVEALED(tile_states[index]))
         return;
     
-    BIT_TOGGLE(tile_states[index], MARK_BIT);    
+    BIT_TOGGLE(tile_states[index], MARK_BIT);
+
+    if(IS_MARKED(tile_states[index])) {
+        bombs_marked++;
+    }
+    else {
+        bombs_marked--;
+    }
 }
