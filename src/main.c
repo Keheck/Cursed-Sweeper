@@ -126,7 +126,7 @@ int main(int argc, char **argv)
         if(y >= game_config.sizey) y = game_config.sizey-1;
         BIT_SET(tile_states[y * game_config.sizex + x/2], HOVER_BIT);
 
-    } while (ch != 'x');
+    } while (ch != 'q');
     
     cleanup:
     free(tile_states);
