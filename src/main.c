@@ -327,7 +327,7 @@ int reveal_tile(t_tile_state *tile_states, int x, int y) {
 
     size_t index = y * game_config.sizex + x;
     
-    if(IS_REVEALED(tile_states[index]))
+    if(IS_REVEALED(tile_states[index]) || IS_MARKED(tile_states[index]))
         return -1;
 
     BIT_SET(tile_states[index], REVEAL_BIT);
