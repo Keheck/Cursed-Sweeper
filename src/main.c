@@ -1,6 +1,5 @@
+#include <sys/time.h>
 #include <curses.h>
-// #include <locale.h>
-// #include <stdlib.h> //noetig fuer atexit()
 #include <argp.h>
 #include <stdlib.h>
 #include <time.h>
@@ -67,6 +66,9 @@ int main(int argc, char **argv)
     int y = 0;
     BIT_SET(tile_states[0], HOVER_BIT);
 
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+
     do {
         ensure_game_size();
         render_game(tile_states);
@@ -87,7 +89,28 @@ int main(int argc, char **argv)
                 ch == KEY_RIGHT ? (x += 2) : (x -= 2);
                 break;
             case ' ':
-                reveal_tile(tile_states, x/2, y);
+                if(reveal_tile(tile_states, x/2, y) == 1) {
+                    render_game(tile_states);
+
+                    attrset(COLOR_PAIR(3) | A_BOLD | A_REVERSE);
+                    move(game_config.sizey/2-1, game_config.sizex-sizeof("GAME OVER")/2);
+                    printw("GAME OVER");
+
+                    attroff(A_BOLD | A_REVERSE);
+                    move(game_config.sizey/2, game_config.sizex-sizeof("Press q to quit")/2);
+                    printw("Press q to quit");
+                    
+                    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+                    standend();
+                    move(game_config.sizey, 0);
+                    clrtoeol();
+                    move(game_config.sizey, 0);
+                    printw("Time elapsed: %ld seconds", end.tv_sec - start.tv_sec);
+
+                    refresh();
+                    while(getch() != 'q');
+                    goto cleanup;
+                }
                 break;
             case 'm':
                 mark_tile(tile_states, x/2, y);
@@ -105,7 +128,7 @@ int main(int argc, char **argv)
 
     } while (ch != 'x');
     
-    //cleanup:
+    cleanup:
     free(tile_states);
     endwin();
     return 0;
@@ -298,17 +321,20 @@ uint8_t get_bomb_count(t_tile_state *tile_states, int x, int y) {
     return result;
 }
 
-void reveal_tile(t_tile_state *tile_states, int x, int y) {
+int reveal_tile(t_tile_state *tile_states, int x, int y) {
     if(x < 0 || x >= game_config.sizex || y < 0 || y >= game_config.sizey) 
-        return;
+        return -1;
 
     size_t index = y * game_config.sizex + x;
     
     if(IS_REVEALED(tile_states[index]))
-        return;
+        return -1;
 
     BIT_SET(tile_states[index], REVEAL_BIT);
     BIT_CLEAR(tile_states[index], MARK_BIT);
+
+    if(IS_BOMB(tile_states[index]))
+        return 1;
     
     if(get_bomb_count(tile_states, x, y) == 0) {
         reveal_tile(tile_states, x+1, y);
@@ -320,6 +346,8 @@ void reveal_tile(t_tile_state *tile_states, int x, int y) {
         reveal_tile(tile_states, x-1, y+1),
         reveal_tile(tile_states, x-1, y-1);
     }
+
+    return 0;
 }
 
 void mark_tile(t_tile_state *tile_states, int x, int y) {

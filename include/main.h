@@ -21,7 +21,7 @@ void ensure_game_size();
 void setup_colors();
 void setup_game(t_tile_state *tile_states);
 uint8_t get_bomb_count(t_tile_state *tile_states, int x, int y);
-void reveal_tile(t_tile_state *states, int x, int y);
+int reveal_tile(t_tile_state *states, int x, int y);
 void mark_tile(t_tile_state *states, int x, int y);
 
 #define BIT(x) (1 << (x))
